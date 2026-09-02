@@ -1,0 +1,583 @@
+<!--
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LeafScan — Plant Disease Detector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <div class="grid-bg"></div>
+
+  <nav class="navbar">
+    <div class="nav-brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <path d="M11 2C11 2 5 6 5 12C5 15.3137 7.68629 18 11 18C14.3137 18 17 15.3137 17 12C17 6 11 2 11 2Z" fill="#4ade80"/>
+        <path d="M11 18V21M8 20H14" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span>LeafScan<span class="brand-ai">AI</span></span>
+    </div>
+    <div class="nav-status">
+      <span class="status-dot"></span>
+      <span class="status-text">Model online · CNN v2.0</span>
+    </div>
+  </nav>
+
+  <main class="layout">
+
+    <div class="left-col">
+
+      <div class="eyebrow">PRECISION BOTANICAL DIAGNOSTICS</div>
+
+      <h1 class="hero-title">
+        Detect plant disease<br/>from a single leaf.
+      </h1>
+
+      <p class="hero-sub">
+        Upload a high-resolution leaf image. Our trained CNN model returns
+        the top three probable pathologies with confidence scores and a
+        tailored treatment protocol.
+      </p>
+
+      <form action="/predict" method="POST" enctype="multipart/form-data" id="uploadForm">
+
+        <div class="upload-box" id="uploadBox">
+          <div class="upload-default" id="uploadDefault">
+            <div class="upload-arrow">↑</div>
+            <p class="upload-hint">Drop leaf image or <span class="upload-link" id="browseLink">browse files</span></p>
+            <p class="upload-meta">JPG · PNG · JPEG — Max 10MB</p>
+          </div>
+          <div class="upload-preview" id="uploadPreview" style="display:none">
+            <div class="upload-arrow green">↑</div>
+            <p class="file-name" id="fileName">—</p>
+            <p class="file-size" id="fileSize">—</p>
+            <img id="thumbImg" src="" alt="preview"/>
+          </div>
+          <input type="file" name="image" id="fileInput" accept="image/*" required/>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-run" id="analyzeBtn" disabled>
+            <span id="btnText">Run Diagnostic →</span>
+            <span id="btnLoader" style="display:none">Analyzing…</span>
+          </button>
+          <button type="button" class="btn-reset" id="resetBtn" style="display:none">Reset</button>
+        </div>
+
+      </form>
+
+      {% if error %}
+      <div class="error-box">⚠ {{ error }}</div>
+      {% endif %}
+
+      <div class="stats-row">
+        <div class="stat">
+          <div class="stat-num">8+</div>
+          <div class="stat-lbl">Disease classes</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <div class="stat-num">Top-3</div>
+          <div class="stat-lbl">Predictions</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <div class="stat-num">&lt; 2s</div>
+          <div class="stat-lbl">Inference</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="right-col">
+      <div class="specimen-panel">
+        <div class="panel-corners">
+          <span class="corner tl"></span><span class="corner tr"></span>
+          <span class="corner bl"></span><span class="corner br"></span>
+        </div>
+        <div class="specimen-img-wrap">
+          <img id="specimenImg" src="" alt="Specimen" style="display:none"/>
+          <div class="specimen-placeholder" id="specimenPlaceholder">
+            <div class="placeholder-leaf">🌿</div>
+            <p>Awaiting specimen…</p>
+          </div>
+        </div>
+        <div class="panel-meta">
+          <div class="meta-row">
+            <div class="meta-cell">
+              <div class="meta-label">SPECIMEN</div>
+              <div class="meta-val" id="metaSpecimen">—</div>
+            </div>
+            <div class="meta-cell">
+              <div class="meta-label">CHANNEL</div>
+              <div class="meta-val">RGB · 128×128</div>
+            </div>
+          </div>
+          <div class="meta-row">
+            <div class="meta-cell">
+              <div class="meta-label">MODEL</div>
+              <div class="meta-val">CNN</div>
+            </div>
+            <div class="meta-cell">
+              <div class="meta-label">STATUS</div>
+              <div class="meta-val ready" id="metaStatus">READY</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    const fileInput   = document.getElementById('fileInput');
+    const uploadBox   = document.getElementById('uploadBox');
+    const uploadDef   = document.getElementById('uploadDefault');
+    const uploadPrev  = document.getElementById('uploadPreview');
+    const browseLink  = document.getElementById('browseLink');
+    const analyzeBtn  = document.getElementById('analyzeBtn');
+    const resetBtn    = document.getElementById('resetBtn');
+    const fileName    = document.getElementById('fileName');
+    const fileSize    = document.getElementById('fileSize');
+    const thumbImg    = document.getElementById('thumbImg');
+    const specimenImg = document.getElementById('specimenImg');
+    const specimenPh  = document.getElementById('specimenPlaceholder');
+    const metaSpec    = document.getElementById('metaSpecimen');
+    const metaStatus  = document.getElementById('metaStatus');
+    const uploadForm  = document.getElementById('uploadForm');
+
+    browseLink.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+    uploadBox.addEventListener('click', () => { if (uploadDef.style.display !== 'none') fileInput.click(); });
+    uploadBox.addEventListener('dragover', e => { e.preventDefault(); uploadBox.classList.add('drag-over'); });
+    uploadBox.addEventListener('dragleave', () => uploadBox.classList.remove('drag-over'));
+    uploadBox.addEventListener('drop', e => {
+      e.preventDefault(); uploadBox.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; handleFile(e.dataTransfer.files[0]); }
+    });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const src = e.target.result;
+        thumbImg.src = src; specimenImg.src = src;
+        specimenImg.style.display = 'block'; specimenPh.style.display = 'none';
+        fileName.textContent = file.name;
+        fileSize.textContent = (file.size/1024).toFixed(1) + ' KB · ready for analysis';
+        metaSpec.textContent = 'Loaded'; metaStatus.textContent = 'READY';
+        metaStatus.className = 'meta-val ready';
+        uploadDef.style.display = 'none'; uploadPrev.style.display = 'flex';
+        analyzeBtn.disabled = false; resetBtn.style.display = 'inline-block';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    resetBtn.addEventListener('click', () => {
+      fileInput.value = ''; uploadDef.style.display = 'flex'; uploadPrev.style.display = 'none';
+      specimenImg.style.display = 'none'; specimenPh.style.display = 'flex';
+      analyzeBtn.disabled = true; resetBtn.style.display = 'none';
+      metaSpec.textContent = '—'; metaStatus.textContent = 'READY';
+    });
+
+    uploadForm.addEventListener('submit', () => {
+      document.getElementById('btnText').style.display = 'none';
+      document.getElementById('btnLoader').style.display = 'inline';
+      analyzeBtn.disabled = true; metaStatus.textContent = 'PROCESSING…';
+      metaStatus.className = 'meta-val processing';
+    });
+  </script>
+</body>
+</html>
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LeafCare AI — Plant Disease Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <div class="nav-logo">
+        <span class="logo-icon">🌿</span>
+        <span class="logo-text"><span class="logo-leaf">LeafCare</span><span class="logo-ai"> AI</span></span>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#home">Home</a></li>
+        <li><a href="#detect">Detect Disease</a></li>
+        <li><a href="#prevention">Prevention Tips</a></li>
+        <li><a href="#about">About</a></li>
+      </ul>
+    </div>
+    <a href="#detect" class="btn-upload-nav">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload Leaf Image
+    </a>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero" id="home">
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <div class="hero-left">
+        <div class="hero-badge">
+          <span class="badge-dot"></span>
+          AI-POWERED CROP HEALTH
+        </div>
+        <h1 class="hero-title">
+          AI-Powered Plant<br/>
+          <span class="hero-green">Disease Detection</span>
+        </h1>
+        <p class="hero-sub">
+          Upload a leaf image and instantly detect whether your plant is healthy or affected by disease. Get expert-grade diagnosis, treatments, and prevention — all in seconds.
+        </p>
+        <div class="hero-btns">
+          <a href="#detect" class="btn-primary">Start Detection →</a>
+        </div>
+      </div>
+
+      <div class="hero-right">
+        <div class="scan-card">
+          <div class="scan-header">
+            <div class="scan-live">
+              <span class="live-dot"></span>
+              LIVE SCAN
+            </div>
+            <span class="scan-time">2.3s</span>
+          </div>
+          <div class="scan-img-wrap">
+            <img src="https://images.unsplash.com/photo-1530836369250-ef72a3f5cda8?w=500&q=80" alt="Diseased leaf scan" class="scan-img"/>
+          </div>
+          <div class="scan-rows">
+            <div class="scan-row">
+        
+            </div>
+            <div class="scan-row">
+              <span class="scan-label">Status</span>
+              <span class="scan-val scan-chip diseased">Diseased</span>
+            </div>
+            <div class="scan-row">
+              <span class="scan-label">Confidence</span>
+              <span class="scan-val scan-chip">94%</span>
+            </div>
+          </div>
+          <div class="scan-diagnosis">
+            <div class="diag-label">DIAGNOSIS</div>
+            <div class="diag-name"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how-section" id="how">
+    <div class="container">
+      <div class="section-eyebrow">HOW IT WORKS</div>
+      <h2 class="section-title">From leaf to action in 3 seconds</h2>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">01</div>
+          <div class="step-body">
+            <h3>Upload leaf image</h3>
+            <p>Snap or upload a clear photo of an affected leaf — front or back side.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-num">02</div>
+          <div class="step-body">
+            <h3>AI analyzes the image</h3>
+            <p>A trained CNN model scans for disease patterns across 17 conditions in under 2 seconds.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-num">03</div>
+          <div class="step-body">
+            <h3>Disease is identified</h3>
+            <p>Get the disease name, confidence score, and threat level for your crop.</p>
+          </div>
+        </div>
+        <div class="step-card">
+          <div class="step-num">04</div>
+          <div class="step-body">
+            <h3>Get treatment advice</h3>
+            <p>Receive tailored treatment and prevention guidance you can act on today.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DETECT SECTION -->
+  <section class="detect-section" id="detect">
+    <div class="container">
+      <div class="section-eyebrow green">DETECT DISEASE</div>
+      <h2 class="section-title dark">Diagnose a leaf in seconds</h2>
+      <p class="section-sub">Drop in any plant leaf photo and our AI will identify diseases, severity, and recommended actions.</p>
+
+      <div class="detect-grid">
+
+        <!-- UPLOAD PANEL -->
+        <div class="upload-panel" id="uploadPanel">
+          <form action="/predict" method="POST" enctype="multipart/form-data" id="uploadForm">
+
+            <div class="drop-zone" id="dropZone">
+              <div class="drop-default" id="dropDefault">
+                <div class="upload-icon-wrap">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <h3 class="drop-title">Drop your leaf image here</h3>
+                <p class="drop-sub">Drag & drop or click to upload. JPG, PNG up to 10 MB.<br/>Best results with clear, well-lit photos.</p>
+                <label class="btn-browse" for="fileInput">Browse files</label>
+              </div>
+
+              <div class="drop-preview" id="dropPreview" style="display:none">
+                <img id="previewImg" src="" alt="Preview"/>
+                <p class="preview-name" id="previewName"></p>
+                <button type="button" class="btn-remove" id="removeBtn">✕ Remove</button>
+              </div>
+
+              <input type="file" id="fileInput" name="image" accept="image/*" required style="display:none"/>
+            </div>
+
+            <button type="submit" class="btn-analyze" id="analyzeBtn" disabled>
+              <span id="btnText">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:6px"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                Detect Disease
+              </span>
+              <span id="btnLoader" style="display:none">⏳ Analyzing…</span>
+            </button>
+
+          </form>
+
+          {% if error %}
+          <div class="error-banner">⚠ {{ error }}</div>
+          {% endif %}
+        </div>
+
+        <!-- RESULT PANEL (empty state) -->
+        <div class="result-panel" id="resultPanel">
+          <div class="result-empty">
+            <div class="leaf-icon-wrap">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#2d6a4f" stroke-width="1.5"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+            </div>
+            <h3>Your AI diagnosis appears here</h3>
+            <p>Upload a leaf image to see the disease name, threat level, treatment, and prevention tips.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- DISEASE LIBRARY --><!--
+  <section class="diseases-section" id="diseases">
+    <div class="container">
+      <div class="section-eyebrow green">DISEASE LIBRARY</div>
+      <h2 class="section-title dark">Know the enemy of your crops</h2>
+      <p class="section-sub">Common plant diseases detected by our AI — their symptoms, treatments, and prevention strategies.</p>
+
+      <div class="disease-grid">
+        <div class="disease-card">
+          <div class="disease-img-wrap">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Late_blight_on_tomato_leaves.jpg/640px-Late_blight_on_tomato_leaves.jpg" alt="Tomato Late Blight" onerror="this.src='https://via.placeholder.com/400x220/1a5c2a/ffffff?text=Tomato+Late+Blight'"/>
+            <span class="threat-badge high">● HIGH THREAT</span>
+          </div>
+          <div class="disease-body">
+            <div class="disease-crop">TOMATO • FUNGAL</div>
+            <h3>Tomato Late Blight</h3>
+            <p>Devastating water mold causing rapid leaf collapse and fruit rot in cool, wet weather.</p>
+            <a href="#detect" class="btn-view">View Details →</a>
+          </div>
+        </div>
+
+        <div class="disease-card">
+          <div class="disease-img-wrap">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Potato_early_blight.jpg/640px-Potato_early_blight.jpg" alt="Potato Early Blight" onerror="this.src='https://via.placeholder.com/400x220/1a5c2a/ffffff?text=Potato+Early+Blight'"/>
+            <span class="threat-badge medium">● MEDIUM THREAT</span>
+          </div>
+          <div class="disease-body">
+            <div class="disease-crop">POTATO • FUNGAL</div>
+            <h3>Potato Early Blight</h3>
+            <p>Concentric brown bullseye spots on older leaves, reducing yield over the season.</p>
+            <a href="#detect" class="btn-view">View Details →</a>
+          </div>
+        </div>
+
+        <div class="disease-card">
+          <div class="disease-img-wrap">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Corn_rust_Puccinia_sorghi.jpg/640px-Corn_rust_Puccinia_sorghi.jpg" alt="Corn Common Rust" onerror="this.src='https://via.placeholder.com/400x220/1a5c2a/ffffff?text=Corn+Common+Rust'"/>
+            <span class="threat-badge medium">● MEDIUM THREAT</span>
+          </div>
+          <div class="disease-body">
+            <div class="disease-crop">CORN • FUNGAL</div>
+            <h3>Corn Common Rust</h3>
+            <p>Cinnamon-brown pustules that burst through leaves, sapping plant vigor and yield.</p>
+            <a href="#detect" class="btn-view">View Details →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+-->
+  <!-- PREVENTION TIPS -->
+  <section class="prevention-section" id="prevention">
+    <div class="container">
+      <div class="section-eyebrow green">GENERAL PREVENTION TIPS</div>
+      <h2 class="section-title dark">Take care of your own Plant</h2>
+      <h2 class="section-title dark">Stop disease before it starts</h2>
+      <p class="section-sub">Smart agronomy practices reduce disease pressure by up to 80%. Start with the basics.</p>
+
+      <div class="tips-grid">
+        <div class="tip-card">
+          <div class="tip-icon">🌱</div>
+          <h4>Use disease-free seeds</h4>
+          <p>Source certified, pathogen-free seeds and seedlings from trusted suppliers.</p>
+        </div>
+        <div class="tip-card">
+          <div class="tip-icon">💧</div>
+          <h4>Avoid overwatering</h4>
+          <p>Excess moisture invites fungal growth. Water deeply but less frequently.</p>
+        </div>
+        <div class="tip-card">
+          <div class="tip-icon">🌬️</div>
+          <h4>Improve air circulation</h4>
+          <p>Space plants generously and prune to keep canopies open and dry.</p>
+        </div>
+        <div class="tip-card">
+          <div class="tip-icon">🔍</div>
+          <h4>Inspect leaves regularly</h4>
+          <p>Weekly scouting catches outbreaks before they spread across the field.</p>
+        </div>
+        <div class="tip-card">
+          <div class="tip-icon">✂️</div>
+          <h4>Remove infected leaves</h4>
+          <p>Prune and destroy diseased tissue — never compost it back into the field.</p>
+        </div>
+        <div class="tip-card">
+          <div class="tip-icon">🧪</div>
+          <h4>Use recommended treatments</h4>
+          <p>Apply organic or labelled fungicides only when disease pressure is confirmed.</p>
+        </div>
+        <div class="tip-card">
+          <div class="tip-icon">🔄</div>
+          <h4>Practice crop rotation</h4>
+          <p>Rotate families every 2–3 seasons to break disease cycles in the soil.</p>
+        </div>
+        <div class="tip-card">
+          <div class="tip-icon">☀️</div>
+          <h4>Sun & sanitation</h4>
+          <p>Clean tools and stakes — sun exposure reduces pathogen survival on surfaces.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ABOUT -->
+  <section class="about-section" id="about">
+    <div class="container about-grid">
+      <div class="about-left">
+        <div class="section-eyebrow green">ABOUT LEAFCARE AI</div>
+        <h2 class="section-title dark">Built for farmers,<br/>powered by <span class="hero-green">deep learning.</span></h2>
+        <p class="about-body">LeafCare AI uses convolutional neural networks trained on hundreds of thousands of annotated leaf images to identify plant diseases with expert-grade accuracy. We help farmers, gardeners, agronomists, and students diagnose problems before they spread — protecting yields, reducing pesticide overuse, and supporting sustainable agriculture.</p>
+        <div class="about-stats">
+          <div class="stat"><div class="stat-n">6k+</div><div class="stat-l">Training images</div></div>
+          <div class="stat"><div class="stat-n">8</div><div class="stat-l">Disease classes detected</div></div>
+        </div>
+      </div>
+      <div class="about-right">
+        <div class="about-img-wrap">
+          <img src="https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=600&q=80" alt="Farm field" onerror="this.style.display='none'"/>
+          <div class="about-mission">
+            <div class="mission-label">MISSION</div>
+            <p>Make expert crop diagnosis free and accessible to every farmer on earth.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <span class="logo-icon">🌿</span>
+        <span class="logo-text"><span class="logo-leaf">LeafCare</span><span class="logo-ai"> AI</span></span>
+      </div>
+      <p class="footer-copy">© 2025 LeafCare AI. Built with TensorFlow & Flask. For educational purposes.</p>
+    </div>
+  </footer>
+
+  <script>
+    const fileInput  = document.getElementById('fileInput');
+    const dropZone   = document.getElementById('dropZone');
+    const dropDef    = document.getElementById('dropDefault');
+    const dropPrev   = document.getElementById('dropPreview');
+    const previewImg = document.getElementById('previewImg');
+    const prevName   = document.getElementById('previewName');
+    const removeBtn  = document.getElementById('removeBtn');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const uploadForm = document.getElementById('uploadForm');
+
+    // click anywhere on drop zone
+    dropZone.addEventListener('click', e => {
+      if (!e.target.closest('.btn-remove') && !e.target.closest('.btn-browse')) fileInput.click();
+    });
+    document.querySelectorAll('.btn-browse').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); fileInput.click(); }));
+
+    // drag & drop
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault(); dropZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; showPreview(e.dataTransfer.files[0]); }
+    });
+
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) showPreview(fileInput.files[0]); });
+
+    function showPreview(file) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        previewImg.src = e.target.result;
+        prevName.textContent = file.name + ' (' + (file.size/1024).toFixed(1) + ' KB)';
+        dropDef.style.display = 'none';
+        dropPrev.style.display = 'flex';
+        analyzeBtn.disabled = false;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    removeBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      fileInput.value = '';
+      dropDef.style.display = 'flex';
+      dropPrev.style.display = 'none';
+      analyzeBtn.disabled = true;
+    });
+
+    uploadForm.addEventListener('submit', () => {
+      document.getElementById('btnText').style.display = 'none';
+      document.getElementById('btnLoader').style.display = 'inline';
+      analyzeBtn.disabled = true;
+    });
+
+    // smooth scroll for nav
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        const t = document.querySelector(a.getAttribute('href'));
+        if (t) { e.preventDefault(); t.scrollIntoView({ behavior:'smooth' }); }
+      });
+    });
+  </script>
+</body>
+</html>

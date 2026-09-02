@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LeafCare AI — Diagnosis Results</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <div class="nav-logo">
+        <span class="logo-icon">🌿</span>
+        <span class="logo-text"><span class="logo-leaf">LeafCare</span><span class="logo-ai"> AI</span></span>
+      </div>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/#detect">Detect Disease</a></li>
+        <li><a href="/#diseases">Plant Diseases</a></li>
+        <li><a href="/#prevention">Prevention Tips</a></li>
+        <li><a href="/#about">About</a></li>
+      </ul>
+    </div>
+    <a href="/" class="btn-upload-nav">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Scan Another Leaf
+    </a>
+  </nav>
+
+  <!-- RESULTS PAGE -->
+  <div class="results-page">
+    <div class="container">
+
+      <!-- HEADER -->
+      <div class="results-header">
+        <div class="section-eyebrow green">DIAGNOSTIC REPORT</div>
+        <h1 class="results-title">Your Leaf Diagnosis</h1>
+        <p class="results-sub">AI analysis complete — top predictions ranked by confidence score</p>
+      </div>
+
+      {% set top = results[0] %}
+
+      <!-- LOW CONFIDENCE WARNING -->
+      {% if low_conf %}
+      <div class="warn-banner">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span><strong>Low confidence prediction.</strong> The model is uncertain — try a clearer, closer photo of the affected leaf in good lighting.</span>
+      </div>
+      {% endif %}
+
+      <!-- TOP RESULT HERO CARD -->
+      <div class="top-result severity-{{ top.severity_class }}">
+        <div class="top-left">
+          <div class="top-icon-big">{{ top.icon }}</div>
+          <div class="top-info">
+            <div class="top-rank">TOP PREDICTION · #1</div>
+            <div class="top-plant-name">{{ top.plant }}</div>
+            <div class="top-disease-name">{{ top.disease }}</div>
+            <div class="top-severity-wrap">
+              <span class="severity-pill severity-{{ top.severity_class }}">
+                {% if top.severity == 'None' %}✅ Healthy{% elif top.severity == 'Moderate' %}⚠️ Moderate Risk{% else %}🚨 High Risk{% endif %}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="top-right">
+          <div class="big-conf">{{ top.confidence }}<span class="conf-pct">%</span></div>
+          <div class="conf-label">Confidence</div>
+          <div class="conf-bar-track">
+            <div class="conf-bar-fill severity-{{ top.severity_class }}" style="width:{{ top.confidence }}%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TREATMENT + PREVENTION -->
+      <div class="action-grid">
+        <div class="action-card">
+          <div class="action-icon">💊</div>
+          <div class="action-content">
+            <div class="action-label">RECOMMENDED TREATMENT</div>
+            <p>{{ top.treatment }}</p>
+          </div>
+        </div>
+        <div class="action-card">
+          <div class="action-icon">🛡️</div>
+          <div class="action-content">
+            <div class="action-label">PREVENTION</div>
+            <p>{{ top.prevention }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- OTHER PREDICTIONS -->
+      {% if results|length > 1 %}
+      <div class="other-section">
+        <div class="other-heading">Other Possible Conditions</div>
+        <div class="other-cards">
+          {% for r in results[1:] %}
+          <div class="other-card">
+            <div class="other-left">
+              <span class="other-icon">{{ r.icon }}</span>
+              <div>
+                <div class="other-rank">#{{ loop.index + 1 }} PREDICTION</div>
+                <div class="other-name">{{ r.plant }} — {{ r.disease }}</div>
+              </div>
+            </div>
+            <div class="other-right">
+              <div class="other-conf">{{ r.confidence }}%</div>
+              <div class="other-conf-bar">
+                <div class="other-conf-fill severity-{{ r.severity_class }}" style="width:{{ r.confidence }}%"></div>
+              </div>
+              <span class="severity-pill small severity-{{ r.severity_class }}">{{ r.severity }}</span>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- CTA -->
+      <div class="result-cta">
+        <a href="/" class="btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:6px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Scan Another Leaf
+        </a>
+       
+      </div>
+
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <span class="logo-icon">🌿</span>
+        <span class="logo-text"><span class="logo-leaf">LeafCare</span><span class="logo-ai"> AI</span></span>
+      </div>
+      <p class="footer-copy">© 2025 LeafCare AI. Built with TensorFlow & Flask. For educational purposes.</p>
+    </div>
+  </footer>
+
+</body>
+</html>
