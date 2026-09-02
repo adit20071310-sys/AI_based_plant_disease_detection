@@ -1,0 +1,1 @@
+# AI based Plant disease detection
